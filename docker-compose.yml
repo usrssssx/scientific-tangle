@@ -1,0 +1,19 @@
+services:
+  rd-kg-api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - RD_KG_DB_PATH=/app/data/rd_knowledge.sqlite
+      - RD_KG_UPLOAD_DIR=/app/data/uploads
+  rd-kg-ui:
+    build: .
+    command: streamlit run ui/streamlit_app.py --server.address 0.0.0.0 --server.port 8501
+    ports:
+      - "8501:8501"
+    environment:
+      - RD_KG_API_URL=http://rd-kg-api:8000
+    depends_on:
+      - rd-kg-api

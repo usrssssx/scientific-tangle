@@ -1,0 +1,47 @@
+[
+  {
+    "id": "desalination_tds",
+    "query": "Какие методы обессоливания воды подходят для обогатительной фабрики, если исходная вода содержит сульфаты, хлориды, Ca, Mg, Na по 200-300 мг/л, а требуемый сухой остаток <=1000 мг/дм3?",
+    "expected_source_contains": ["обессоливания шахтных вод"],
+    "expected_processes": ["desalination"],
+    "expected_materials": ["sulfates", "chlorides", "calcium", "magnesium", "sodium"],
+    "min_sources": 1,
+    "min_facts": 1
+  },
+  {
+    "id": "catholyte_circulation",
+    "query": "Какие технические решения организации циркуляции католита при электроэкстракции никеля описаны в мировой практике, и какая скорость потока считается оптимальной?",
+    "expected_source_contains": ["patent landscape"],
+    "expected_processes": ["catholyte_circulation", "electrowinning"],
+    "expected_materials": ["nickel"],
+    "min_sources": 1,
+    "min_facts": 1
+  },
+  {
+    "id": "pgm_partitioning",
+    "query": "Покажите все эксперименты и публикации по распределению Au, Ag и МПГ между медным/никелевым штейном и шлаком за последние 5 лет.",
+    "expected_source_contains": ["Распределение Au, Ag и МПГ"],
+    "expected_processes": ["matte_slag_partitioning"],
+    "expected_materials": ["gold", "silver", "pgm", "matte", "slag"],
+    "min_sources": 1,
+    "min_facts": 1
+  },
+  {
+    "id": "mine_water_injection",
+    "query": "Какие способы закачки шахтных вод в глубокие горизонты применялись в России и за рубежом, и каковы их технико-экономические показатели?",
+    "expected_source_contains": ["Закачка шахтных вод"],
+    "expected_processes": ["mine_water_injection"],
+    "expected_materials": ["mine_water"],
+    "min_sources": 1,
+    "min_facts": 1
+  },
+  {
+    "id": "cold_heap_gap",
+    "query": "Есть ли пробелы по комбинации холодный климат + кучное выщелачивание + никелевая руда?",
+    "expected_source_contains": ["Кучное выщелачивание"],
+    "expected_processes": ["cold_climate_operation", "heap_leaching"],
+    "expected_materials": ["nickel_ore"],
+    "min_sources": 1,
+    "min_gaps": 1
+  }
+]

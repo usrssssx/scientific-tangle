@@ -1,0 +1,70 @@
+{
+  "materials": {
+    "nickel": ["никель", "никеля", "никелевый", "никелевая", "никелевые", "nickel", "ni"],
+    "nickel_ore": ["никелевая руда", "никелевой руды", "nickel ore"],
+    "copper": ["медь", "меди", "медный", "медного", "copper", "cu"],
+    "sulfates": ["сульфаты", "сульфат", "so4", "sulfates"],
+    "chlorides": ["хлориды", "хлорид", "chlorides"],
+    "calcium": ["ca", "кальций", "кальция", "calcium"],
+    "magnesium": ["mg", "магний", "магния", "magnesium"],
+    "sodium": ["na", "натрий", "натрия", "sodium"],
+    "gold": ["au", "золото", "золота", "gold"],
+    "silver": ["ag", "серебро", "серебра", "silver"],
+    "pgm": ["мпг", "платиновые металлы", "металлы платиновой группы", "pgm", "platinum group metals"],
+    "matte": ["штейн", "штейном", "медный штейн", "никелевый штейн", "matte"],
+    "slag": ["шлак", "шлаком", "медный шлак", "никелевый шлак", "slag"],
+    "mine_water": ["шахтные воды", "шахтных вод", "mine water", "mine waters"],
+    "gypsum": ["гипс", "техногенный гипс", "gypsum"],
+    "lithium_battery_waste": ["отработанные литий-ионные батареи", "lib waste", "battery waste"]
+  },
+  "processes": {
+    "desalination": ["обессоливание", "обессоливания", "desalination"],
+    "reverse_osmosis": ["обратный осмос", "ro", "reverse osmosis"],
+    "nanofiltration": ["нанофильтрация", "nf", "nanofiltration"],
+    "lime_soda_softening": ["известково-содовое умягчение", "известковое умягчение", "lime-soda softening", "lime soda softening"],
+    "electrowinning": ["электроэкстракция", "электроэкстракции", "электроизвлечение", "electrowinning", "electroextraction"],
+    "catholyte_circulation": ["циркуляция католита", "циркуляции католита", "catholyte circulation", "catholyte flow"],
+    "matte_slag_partitioning": ["распределение между штейном и шлаком", "распределению au", "между медным/никелевым штейном и шлаком", "между медным штейном и шлаком", "распределение au ag и мпг", "matte-slag partitioning", "matte slag partitioning"],
+    "mine_water_injection": ["закачка шахтных вод", "закачки шахтных вод", "deep well injection", "deep horizon injection"],
+    "heap_leaching": ["кучное выщелачивание", "кучного выщелачивания", "heap leaching"],
+    "cold_climate_operation": ["холодный климат", "условиях холодного климата", "cold climate", "cold-climate operation"],
+    "flash_smelting": ["пвп", "печь взвешенной плавки", "flash smelting", "flash smelting furnace"],
+    "gas_cleaning": ["очистка газов", "gas cleaning"],
+    "so2_removal": ["удаление so2", "удаление so₂", "концентрирование so2", "so2 removal", "sulfur dioxide removal"],
+    "waste_recycling": ["переработка отходов", "waste recycling"]
+  },
+  "equipment": {
+    "concentrator": ["обогатительная фабрика", "оф", "concentrator"],
+    "electrowinning_cell": ["ванна электроэкстракции", "электролизная ванна", "electrowinning cell"],
+    "diaphragm_cell": ["диафрагменная ячейка", "diaphragm cell"],
+    "flash_smelting_furnace": ["печь взвешенной плавки", "пвп", "flash smelting furnace"],
+    "gas_cleaning_system": ["система очистки газов", "gas cleaning system"],
+    "injection_well": ["нагнетательная скважина", "injection well"],
+    "membrane_unit": ["мембранная установка", "membrane unit"]
+  },
+  "properties": {
+    "tds": ["сухой остаток", "минерализация", "tds", "total dissolved solids"],
+    "sulfate_concentration": ["концентрация сульфатов", "сульфаты", "so4", "sulfate concentration"],
+    "chloride_concentration": ["концентрация хлоридов", "хлориды", "chloride concentration"],
+    "calcium_concentration": ["концентрация кальция", "кальций", "ca"],
+    "magnesium_concentration": ["концентрация магния", "магний", "mg"],
+    "sodium_concentration": ["концентрация натрия", "натрий", "na"],
+    "flow_velocity": ["скорость потока", "скорость циркуляции", "flow velocity", "flow speed"],
+    "temperature": ["температура", "температуре", "temperature"],
+    "recovery": ["извлечение", "выход металла", "recovery", "metal recovery"],
+    "capex": ["капитальные затраты", "capex"],
+    "opex": ["операционные затраты", "opex"],
+    "cost": ["стоимость", "удельная стоимость", "cost"],
+    "productivity": ["производительность", "throughput", "productivity"],
+    "concentration": ["концентрация", "content"],
+    "ph": ["ph", "pH"]
+  },
+  "geography": {
+    "russia": ["россия", "россии", "отечественная практика", "russia", "russian"],
+    "foreign": ["зарубежная практика", "мировая практика", "international", "foreign", "global"],
+    "canada": ["канада", "canada"],
+    "finland": ["финляндия", "finland"],
+    "chile": ["чили", "chile"],
+    "kazakhstan": ["казахстан", "kazakhstan"]
+  }
+}

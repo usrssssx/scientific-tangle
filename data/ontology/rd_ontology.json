@@ -1,0 +1,162 @@
+{
+  "version": "0.3.0",
+  "namespace": "https://example.local/rdkg/ontology#",
+  "jsonld_context": {
+    "@vocab": "https://example.local/rdkg/ontology#",
+    "rdkg": "https://example.local/rdkg/ontology#",
+    "schema": "http://schema.org/",
+    "dct": "http://purl.org/dc/terms/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "name": "schema:name",
+    "source": {"@id": "dct:source", "@type": "@id"},
+    "source_id": "rdkg:sourceId",
+    "subject": {"@id": "rdkg:subject", "@type": "@id"},
+    "predicate": "rdkg:predicate",
+    "object": {"@id": "rdkg:object", "@type": "@id"},
+    "confidence": {"@id": "rdkg:confidence", "@type": "xsd:double"},
+    "evidence": "rdkg:evidence",
+    "uses_material": {"@id": "rdkg:uses_material", "@type": "@id"},
+    "uses_equipment": {"@id": "rdkg:uses_equipment", "@type": "@id"},
+    "operates_at_condition": {"@id": "rdkg:operates_at_condition", "@type": "@id"},
+    "produces_output": {"@id": "rdkg:produces_output", "@type": "@id"},
+    "described_in": {"@id": "rdkg:described_in", "@type": "@id"},
+    "validated_by": {"@id": "rdkg:validated_by", "@type": "@id"},
+    "contradicts": {"@id": "rdkg:contradicts", "@type": "@id"},
+    "expert_in": {"@id": "rdkg:expert_in", "@type": "@id"},
+    "performed_by": {"@id": "rdkg:performed_by", "@type": "@id"}
+  },
+  "classes": {
+    "Material": {
+      "description": "Material, substance, ore, solution, product, waste stream or intermediate.",
+      "examples": ["nickel", "mine_water", "pgm", "slag"]
+    },
+    "Process": {
+      "description": "Technology, operation, transformation or operating mode.",
+      "examples": ["desalination", "electrowinning", "heap_leaching"]
+    },
+    "Equipment": {
+      "description": "Industrial or laboratory equipment used by a process.",
+      "examples": ["electrowinning_cell", "injection_well", "membrane_unit"]
+    },
+    "Property": {
+      "description": "Measured or constrained parameter.",
+      "examples": ["tds", "flow_velocity", "recovery", "opex"]
+    },
+    "Experiment": {
+      "description": "Experimental or pilot observation with conditions and metrics."
+    },
+    "Publication": {
+      "description": "External publication, patent, review or conference material."
+    },
+    "Report": {
+      "description": "Internal report, protocol or technical note."
+    },
+    "Expert": {
+      "description": "Person or team with domain expertise."
+    },
+    "Facility": {
+      "description": "Industrial site, lab, plant or installation."
+    },
+    "Finding": {
+      "description": "Claim, conclusion, recommendation, limitation or contradiction."
+    },
+    "Technology": {
+      "description": "Named technology package or reusable method that can combine processes, equipment and operating conditions."
+    },
+    "EconomicIndicator": {
+      "description": "CAPEX, OPEX, cost, productivity or other economic metric."
+    },
+    "Geography": {
+      "description": "Country, region or practice scope such as domestic/foreign."
+    }
+  },
+  "relations": {
+    "describes": {"domain": ["Publication", "Report"], "range": ["Material", "Process", "Equipment", "Property", "Finding"]},
+    "uses_material": {"domain": ["Process", "Experiment"], "range": ["Material"]},
+    "uses_equipment": {"domain": ["Process", "Experiment"], "range": ["Equipment"]},
+    "operates_at_condition": {"domain": ["Process", "Experiment"], "range": ["Property"]},
+    "produces_output": {"domain": ["Process", "Experiment"], "range": ["Material", "Finding"]},
+    "described_in": {"domain": ["Finding", "Process", "Material"], "range": ["Publication", "Report"]},
+    "validated_by": {"domain": ["Finding", "Process"], "range": ["Experiment"]},
+    "contradicts": {"domain": ["Finding"], "range": ["Finding"]},
+    "has_numeric_condition": {"domain": ["Finding", "Process", "Experiment"], "range": ["Property"]},
+    "recommended_sequence_contains": {"domain": ["Process"], "range": ["Process"]},
+    "expert_in": {"domain": ["Expert"], "range": ["Material", "Process", "Equipment", "Property"]},
+    "performed_by": {"domain": ["Experiment"], "range": ["Expert", "Facility"]}
+  },
+  "numeric_fact_required_fields": [
+    "source_id",
+    "subject_id",
+    "predicate",
+    "property",
+    "comparator",
+    "unit",
+    "confidence",
+    "extraction_confidence",
+    "evidence",
+    "status",
+    "version"
+  ],
+  "fact_statuses": ["extracted", "normalized", "candidate", "verified", "rejected", "superseded", "contradicted"],
+  "unit_ontology": {
+    "canonical_units": {
+      "mg_l": {"dimension": "concentration", "label": "mg/L"},
+      "g_l": {"dimension": "concentration", "label": "g/L"},
+      "m_s": {"dimension": "velocity", "label": "m/s"},
+      "m3_h": {"dimension": "flow_rate", "label": "m3/h"},
+      "m3_day": {"dimension": "flow_rate", "label": "m3/day"},
+      "l_s": {"dimension": "flow_rate", "label": "L/s"},
+      "percent": {"dimension": "ratio", "label": "%"},
+      "celsius": {"dimension": "temperature", "label": "degC"},
+      "usd_m3": {"dimension": "unit_cost", "label": "USD/m3"},
+      "rub_m3": {"dimension": "unit_cost", "label": "RUB/m3"},
+      "t_day": {"dimension": "throughput", "label": "t/day"},
+      "kg_day": {"dimension": "throughput", "label": "kg/day"}
+    },
+    "linear_conversions": [
+      {"from": "g_l", "to": "mg_l", "factor": 1000.0},
+      {"from": "mg_l", "to": "g_l", "factor": 0.001},
+      {"from": "t_day", "to": "kg_day", "factor": 1000.0},
+      {"from": "kg_day", "to": "t_day", "factor": 0.001},
+      {"from": "m3_day", "to": "m3_h", "factor": 0.0416666667},
+      {"from": "m3_h", "to": "m3_day", "factor": 24.0},
+      {"from": "l_s", "to": "m3_h", "factor": 3.6},
+      {"from": "m3_h", "to": "l_s", "factor": 0.2777777778}
+    ]
+  },
+  "production_storage_target": {
+    "transactional_store": {
+      "engine": "PostgreSQL",
+      "owns": ["sources", "documents", "facts", "fact_versions", "experiments", "experts", "audit_log", "access_policies"],
+      "required_capabilities": ["ACID writes", "row-level security", "point-in-time recovery", "partitioned audit/event tables"]
+    },
+    "graph_store": {
+      "engine_options": ["Neo4j", "Amazon Neptune"],
+      "owns": ["entities", "relations", "relation_assertions", "contradiction_groups"],
+      "required_capabilities": ["3-4 hop traversal", "source-aware edge filtering", "entity merge history"]
+    },
+    "search_store": {
+      "engine_options": ["Elasticsearch", "Vespa"],
+      "owns": ["BM25 index", "vector embeddings", "reranker features", "metadata filters"],
+      "required_capabilities": ["hybrid retrieval", "numeric/range filters", "source/page citations"]
+    },
+    "object_storage": {
+      "engine_options": ["S3-compatible object storage", "MinIO"],
+      "owns": ["original files", "OCR sidecars", "extracted tables", "export packages", "backup artifacts"],
+      "required_capabilities": ["immutability", "checksums", "retention policies", "server-side encryption"]
+    }
+  },
+  "supported_domains": [
+    "hydrometallurgy",
+    "pyrometallurgy",
+    "ecology",
+    "waste_recycling",
+    "electrometallurgy",
+    "geomechanics"
+  ],
+  "extension_points": [
+    "data/dictionaries/domain_terms.json",
+    "data/dictionaries/units.json",
+    "data/evaluation/gold_queries.json"
+  ]
+}

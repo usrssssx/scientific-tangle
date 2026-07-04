@@ -1,0 +1,92 @@
+[
+  {
+    "id": "desalination_water_quality",
+    "text": "Для обессоливания шахтных вод контролируют сульфаты 200-300 мг/л, хлориды 120 мг/л и сухой остаток <=1000 мг/дм3.",
+    "expected_entities": [
+      {"type": "Process", "canonical": "desalination"},
+      {"type": "Material", "canonical": "mine_water"},
+      {"type": "Material", "canonical": "sulfates"},
+      {"type": "Material", "canonical": "chlorides"},
+      {"type": "Property", "canonical": "sulfate_concentration"},
+      {"type": "Property", "canonical": "chloride_concentration"},
+      {"type": "Property", "canonical": "tds"}
+    ],
+    "expected_numeric": [
+      {"property": "sulfate_concentration", "comparator": "between", "min_value": 200.0, "max_value": 300.0, "unit": "mg_l"},
+      {"property": "chloride_concentration", "comparator": "=", "value": 120.0, "unit": "mg_l"},
+      {"property": "tds", "comparator": "<=", "value": 1000.0, "unit": "mg_l"}
+    ],
+    "expected_relations": [
+      {"predicate": "has_numeric_condition", "property": "sulfate_concentration"},
+      {"predicate": "has_numeric_condition", "property": "chloride_concentration"},
+      {"predicate": "has_numeric_condition", "property": "tds"}
+    ]
+  },
+  {
+    "id": "catholyte_flow_velocity",
+    "text": "Циркуляция католита при электроэкстракции никеля: catholyte flow velocity 0.20-0.30 m/s.",
+    "expected_entities": [
+      {"type": "Process", "canonical": "catholyte_circulation"},
+      {"type": "Process", "canonical": "electrowinning"},
+      {"type": "Material", "canonical": "nickel"},
+      {"type": "Property", "canonical": "flow_velocity"}
+    ],
+    "expected_numeric": [
+      {"property": "flow_velocity", "comparator": "between", "min_value": 0.2, "max_value": 0.3, "unit": "m_s"}
+    ],
+    "expected_relations": [
+      {"predicate": "has_numeric_condition", "property": "flow_velocity"}
+    ]
+  },
+  {
+    "id": "matte_slag_partitioning",
+    "text": "Распределение Au, Ag и МПГ между медным штейном и шлаком: извлечение составило 92 %.",
+    "expected_entities": [
+      {"type": "Process", "canonical": "matte_slag_partitioning"},
+      {"type": "Material", "canonical": "gold"},
+      {"type": "Material", "canonical": "silver"},
+      {"type": "Material", "canonical": "pgm"},
+      {"type": "Material", "canonical": "matte"},
+      {"type": "Material", "canonical": "slag"},
+      {"type": "Property", "canonical": "recovery"}
+    ],
+    "expected_numeric": [
+      {"property": "recovery", "comparator": "=", "value": 92.0, "unit": "percent"}
+    ],
+    "expected_relations": [
+      {"predicate": "has_numeric_condition", "property": "recovery"}
+    ]
+  },
+  {
+    "id": "temperature_and_cost",
+    "text": "Процесс ведут при температуре 85 °C, OPEX 12 USD/m3 и CAPEX 1500 руб/м3.",
+    "expected_entities": [
+      {"type": "Property", "canonical": "temperature"},
+      {"type": "Property", "canonical": "opex"},
+      {"type": "Property", "canonical": "capex"}
+    ],
+    "expected_numeric": [
+      {"property": "temperature", "comparator": "=", "value": 85.0, "unit": "celsius"},
+      {"property": "opex", "comparator": "=", "value": 12.0, "unit": "usd_m3"},
+      {"property": "capex", "comparator": "=", "value": 1500.0, "unit": "rub_m3"}
+    ],
+    "expected_relations": [
+      {"predicate": "has_numeric_condition", "property": "temperature"},
+      {"predicate": "has_numeric_condition", "property": "opex"},
+      {"predicate": "has_numeric_condition", "property": "capex"}
+    ]
+  },
+  {
+    "id": "negative_percent_guardrail",
+    "text": "Извлечение составило 120 %, что должно быть отмечено как подозрительное значение.",
+    "expected_entities": [
+      {"type": "Property", "canonical": "recovery"}
+    ],
+    "expected_numeric": [
+      {"property": "recovery", "comparator": "=", "value": 120.0, "unit": "percent", "validation_status": "suspicious"}
+    ],
+    "expected_relations": [
+      {"predicate": "has_numeric_condition", "property": "recovery"}
+    ]
+  }
+]

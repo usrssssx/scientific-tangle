@@ -1,0 +1,22 @@
+# Store large/generated research data binaries in Git LFS.
+data/**/*.sqlite filter=lfs diff=lfs merge=lfs -text
+data/**/*.db filter=lfs diff=lfs merge=lfs -text
+data/**/*.pdf filter=lfs diff=lfs merge=lfs -text
+data/**/*.PDF filter=lfs diff=lfs merge=lfs -text
+data/**/*.doc filter=lfs diff=lfs merge=lfs -text
+data/**/*.DOC filter=lfs diff=lfs merge=lfs -text
+data/**/*.docx filter=lfs diff=lfs merge=lfs -text
+data/**/*.DOCX filter=lfs diff=lfs merge=lfs -text
+data/**/*.docm filter=lfs diff=lfs merge=lfs -text
+data/**/*.ppt filter=lfs diff=lfs merge=lfs -text
+data/**/*.pptx filter=lfs diff=lfs merge=lfs -text
+data/**/*.xls filter=lfs diff=lfs merge=lfs -text
+data/**/*.xlsx filter=lfs diff=lfs merge=lfs -text
+data/**/*.zip filter=lfs diff=lfs merge=lfs -text
+data/**/*.rar filter=lfs diff=lfs merge=lfs -text
+data/**/*.7z filter=lfs diff=lfs merge=lfs -text
+data/**/*.png filter=lfs diff=lfs merge=lfs -text
+data/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+data/**/*.jpeg filter=lfs diff=lfs merge=lfs -text
+data/**/*.tif filter=lfs diff=lfs merge=lfs -text
+data/**/*.tiff filter=lfs diff=lfs merge=lfs -text

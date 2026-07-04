@@ -1,0 +1,37 @@
+[
+  {
+    "name": "Иванова Мария Сергеевна",
+    "organization": "Лаборатория водоподготовки",
+    "geography": "russia",
+    "expertise": ["desalination", "reverse_osmosis", "nanofiltration", "mine_water", "sulfates", "tds"],
+    "contact": "water-lab@example.local"
+  },
+  {
+    "name": "Петров Алексей Николаевич",
+    "organization": "Лаборатория электрометаллургии",
+    "geography": "russia",
+    "expertise": ["electrowinning", "catholyte_circulation", "nickel", "flow_velocity", "diaphragm_cell"],
+    "contact": "electro-lab@example.local"
+  },
+  {
+    "name": "Sophie Martin",
+    "organization": "International Metallurgy Review Group",
+    "geography": "foreign",
+    "expertise": ["matte_slag_partitioning", "gold", "silver", "pgm", "flash_smelting"],
+    "contact": "pgm-review@example.local"
+  },
+  {
+    "name": "Смирнов Олег Викторович",
+    "organization": "Экологическая лаборатория",
+    "geography": "russia",
+    "expertise": ["mine_water_injection", "mine_water", "cost", "opex", "environment"],
+    "contact": "eco-lab@example.local"
+  },
+  {
+    "name": "Кузнецова Анна Игоревна",
+    "organization": "Гидрометаллургическая группа",
+    "geography": "russia",
+    "expertise": ["heap_leaching", "cold_climate_operation", "nickel_ore", "recovery"],
+    "contact": "hydro-lab@example.local"
+  }
+]
