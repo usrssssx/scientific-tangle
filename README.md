@@ -375,7 +375,7 @@ python3 scripts/benchmark_search.py --iterations 3 --json
 - table export покрыт тестом: `/export/table` отдаёт evidence pack в CSV с `source`, `locator`, `span`, value и validation fields, а handler пишет audit action `export_table`.
 - PDF/report package export покрыт тестом: `/export/pdf` отдаёт валидный PDF, `/export/report-package` содержит `answer.md`, `evidence.csv`, `payload.json`, `report.pdf`; sample PDF отрендерен через Poppler и визуально проверен.
 - export DLP policy покрыта тестом: `secret` payload блокируется для `manager`, разрешается для `admin`, а audit получает `export_policy.allowed`, `max_confidentiality` и причину решения.
-- search benchmark smoke: после compact FTS token ranking три итерации по 5 gold queries на текущей БД дали overall p50 `3165.62 ms`, p95 `4111.12 ms`, max `4165.98 ms`.
+- search benchmark smoke: после structured FTS + local hybrid rerank три итерации по 5 gold queries на текущей БД дали overall p50 `170.62 ms`, p95 `2317.85 ms`, max `2437.10 ms`.
 - locator backfill: документы без page/sheet marker получают fallback `chunk N`; рабочая БД теперь имеет `251744/251744` document locators и `409980/409980` fact locators.
 - document embeddings backfill: рабочая БД теперь имеет `251744/251744` embeddings для hybrid retrieval.
 - quality gate smoke: `scripts/evaluate_quality.py --json` проходит `5/5`; retrieval recall@k `1.0`, evidence trace coverage `1.0`, answer citation coverage `1.0`, locator coverage `1.0`.

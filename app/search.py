@@ -181,6 +181,37 @@ def _fts_match_expr(tokens: list[str]) -> str:
     return " OR ".join(f"{t}*" for t in safe)
 
 
+def _structured_group_tokens(category: str, canonical: str, limit: int = 5) -> list[str]:
+    terms = load_domain_terms()
+    aliases = [canonical, *str(canonical).split("_")]
+    aliases.extend(terms.get(category, {}).get(canonical, [])[:8])
+    tokens: list[str] = []
+    for alias in aliases:
+        for token in _tokenize_for_search(str(alias)):
+            safe = re.sub(r"[^a-zA-Zа-яА-ЯёЁ0-9_]", "", token)
+            if safe and safe not in _FTS_NOISE_TOKENS and safe not in tokens:
+                tokens.append(safe)
+            if len(tokens) >= limit:
+                return tokens
+    return tokens
+
+
+def _structured_fts_match_expr(parsed: dict[str, Any]) -> str | None:
+    groups: list[str] = []
+    for parsed_key, category in (
+        ("materials", "materials"),
+        ("processes", "processes"),
+        ("geography", "geography"),
+    ):
+        for canonical in (parsed.get(parsed_key) or [])[:6]:
+            tokens = _structured_group_tokens(category, str(canonical))
+            if tokens:
+                groups.append("(" + " OR ".join(f"{token}*" for token in tokens) + ")")
+    if len(groups) < 2:
+        return None
+    return " AND ".join(groups[:8])
+
+
 def _embedding_query_text(query: str, parsed: dict[str, Any]) -> str:
     structured_terms: list[str] = []
     for key in ("materials", "processes", "equipment", "properties", "geography"):
@@ -266,22 +297,29 @@ def search_documents(conn: sqlite3.Connection, request: SearchRequest, role: str
 
     rows: list[sqlite3.Row]
     if tokens:
-        match_expr = _fts_match_expr(tokens)
-        try:
-            rows = conn.execute(
+        def run_fts(match_expr: str) -> list[sqlite3.Row]:
+            return conn.execute(
                 f"""
-                SELECT s.*, d.id AS document_id, d.text AS snippet, d.locator_type, d.locator,
-                       d.start_char, d.end_char, bm25(documents_fts) AS rank_score,
-                       'bm25' AS retrieval_method
-                FROM documents_fts
-                JOIN documents d ON d.id = documents_fts.doc_id
-                JOIN sources s ON s.id = documents_fts.source_id
-                WHERE documents_fts MATCH ? AND {where}
-                ORDER BY rank_score ASC, s.reliability_score DESC, s.year DESC
-                LIMIT ?
-                """,
+                    SELECT s.*, d.id AS document_id, d.text AS snippet, d.locator_type, d.locator,
+                           d.start_char, d.end_char, bm25(documents_fts) AS rank_score,
+                           'bm25' AS retrieval_method
+                    FROM documents_fts
+                    JOIN documents d ON d.id = documents_fts.doc_id
+                    JOIN sources s ON s.id = documents_fts.source_id
+                    WHERE documents_fts MATCH ? AND {where}
+                    ORDER BY rank_score ASC, s.reliability_score DESC, s.year DESC
+                    LIMIT ?
+                    """,
                 [match_expr] + values + [request.top_k * 2],
             ).fetchall()
+
+        rows = []
+        strict_match_expr = _structured_fts_match_expr(parsed)
+        try:
+            if strict_match_expr:
+                rows = run_fts(strict_match_expr)
+            if not rows:
+                rows = run_fts(_fts_match_expr(tokens))
         except sqlite3.OperationalError:
             rows = []
     else:
@@ -310,7 +348,7 @@ def search_documents(conn: sqlite3.Connection, request: SearchRequest, role: str
     candidate_limit = _hybrid_candidate_limit(request.top_k)
     candidates = rows_to_dicts(rows)
     existing_document_ids = {int(item["document_id"]) for item in candidates if item.get("document_id") is not None}
-    if len(candidates) < request.top_k:
+    if not candidates:
         candidates.extend(
             _supplemental_vector_candidates(
                 conn,
