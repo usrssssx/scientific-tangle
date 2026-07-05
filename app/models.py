@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 Role = Literal["external_partner", "researcher", "analyst", "manager", "admin"]
 AnswerMode = Literal["auto", "review", "comparison", "protocol", "gap_analysis", "evidence_table"]
+ExportApprovalFormat = Literal["markdown", "csv", "pdf", "zip", "jsonld", "rdf"]
 
 
 class NumericFilter(BaseModel):
@@ -136,3 +137,19 @@ class EntitySplitRequest(BaseModel):
     move_edge_ids: list[int] = Field(default_factory=list)
     comment: str | None = None
     reviewer: str = "demo-expert"
+
+
+class ExportApprovalRequest(BaseModel):
+    export_format: ExportApprovalFormat
+    query: str | None = None
+    top_k: int = Field(default=10, ge=1, le=100)
+    answer_mode: AnswerMode | None = None
+    requester: str = "demo-user"
+    justification: str = Field(min_length=1)
+    expires_at: str | None = None
+
+
+class ExportApprovalReviewRequest(BaseModel):
+    reviewer: str = "security-admin"
+    comment: str | None = None
+    expires_at: str | None = None

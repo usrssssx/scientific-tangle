@@ -60,7 +60,7 @@ def backfill(conn, table_limit: int = 2000) -> dict[str, int]:
 
     docs = conn.execute(
         """
-        SELECT id, source_id, chunk_no, text, locator, locator_type, metadata_json
+        SELECT id, source_id, chunk_no, text, locator, locator_type, start_char, end_char, metadata_json
         FROM documents
         ORDER BY source_id, chunk_no
         """
@@ -131,9 +131,17 @@ def backfill(conn, table_limit: int = 2000) -> dict[str, int]:
                     best = (doc, pos, pos + len(short))
                     break
         if best is None:
-            stats["facts_unmatched"] += 1
-            continue
-        doc, start, end = best
+            doc = docs_by_id.get(int(fact["document_id"])) if fact["document_id"] is not None else (candidates[0] if candidates else None)
+            if doc is None:
+                stats["facts_unmatched"] += 1
+                continue
+            start = int(doc.get("start_char") or 0)
+            end = int(doc.get("end_char") or (start + max(len(doc.get("text") or ""), len(fact["evidence"] or ""))))
+            if end <= start:
+                end = start + max(1, len(fact["evidence"] or ""))
+            stats["facts_evidence_fallback"] += 1
+        else:
+            doc, start, end = best
         conn.execute(
             """
             UPDATE facts

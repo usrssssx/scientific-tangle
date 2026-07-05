@@ -1,0 +1,35 @@
+{
+  "source": "ad",
+  "directory_kind": "active_directory",
+  "url": "ldaps://ad.example.com:636",
+  "bind_dn": "CN=svc-rdkg,OU=Service Accounts,DC=example,DC=com",
+  "bind_password_env": "RD_KG_LDAP_BIND_PASSWORD",
+  "user_base_dn": "OU=Users,DC=example,DC=com",
+  "group_base_dn": "OU=Groups,DC=example,DC=com",
+  "user_filter": "(&(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))",
+  "group_filter": "(objectClass=group)",
+  "start_tls": false,
+  "deactivate_missing": true,
+  "delete_missing_groups": false,
+  "attributes": {
+    "user_id": "objectGUID",
+    "user_name": "userPrincipalName",
+    "display_name": "displayName",
+    "email": "mail",
+    "department": "department",
+    "external_id": "distinguishedName"
+  },
+  "group_attributes": {
+    "group_id": "objectGUID",
+    "display_name": "cn",
+    "members": "member",
+    "external_id": "distinguishedName"
+  },
+  "group_role_map": {
+    "RDKG External Partners": "external_partner",
+    "RDKG Researchers": "researcher",
+    "RDKG Analysts": "analyst",
+    "RDKG Managers": "manager",
+    "RDKG Admins": "admin"
+  }
+}

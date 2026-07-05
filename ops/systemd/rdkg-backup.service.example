@@ -1,0 +1,19 @@
+[Unit]
+Description=RD Knowledge scheduled encrypted backup and restore drill
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=rdkg
+Group=rdkg
+WorkingDirectory=/opt/rd_knowledge_mvp
+EnvironmentFile=/etc/rdkg/backup.env
+ExecStart=/opt/rd_knowledge_mvp/.venv/bin/python scripts/backup_db.py run-plan --config /etc/rdkg/backup_plan.json
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/rd_knowledge_mvp/data /secure/offsite/rdkg
+NoNewPrivileges=true

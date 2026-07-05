@@ -37,6 +37,54 @@ def test_document_chunks_get_default_chunk_locator_and_facts_inherit_it(tmp_path
     assert fact["evidence_locator"] == "chunk 1"
 
 
+def test_insert_fact_derives_evidence_span_from_document(tmp_path):
+    with connect(tmp_path / "test.sqlite") as conn:
+        create_schema(conn)
+        source_id = insert_source(conn, {"title": "Curated source"})
+        document_id = insert_document_chunk(
+            conn,
+            source_id,
+            0,
+            "first sentence. exact evidence text. final sentence.",
+            start_char=100,
+            end_char=150,
+        )
+        exact_fact_id = insert_fact(
+            conn,
+            source_id=source_id,
+            subject_id=None,
+            predicate="recommendation",
+            document_id=document_id,
+            evidence="exact evidence text",
+        )
+        curated_fact_id = insert_fact(
+            conn,
+            source_id=source_id,
+            subject_id=None,
+            predicate="recommendation",
+            document_id=document_id,
+            evidence="manual curated summary not copied from the chunk",
+        )
+
+        rows = conn.execute(
+            """
+            SELECT id, evidence_locator, evidence_start, evidence_end
+            FROM facts
+            WHERE id IN (?, ?)
+            ORDER BY id
+            """,
+            (exact_fact_id, curated_fact_id),
+        ).fetchall()
+
+    exact, curated = rows
+    assert exact["evidence_locator"] == "chunk 1"
+    assert exact["evidence_start"] == 116
+    assert exact["evidence_end"] == 135
+    assert curated["evidence_locator"] == "chunk 1"
+    assert curated["evidence_start"] == 100
+    assert curated["evidence_end"] == 150
+
+
 def test_backfill_adds_chunk_locator_to_legacy_documents_and_facts(tmp_path):
     with connect(tmp_path / "test.sqlite") as conn:
         create_schema(conn)
@@ -64,6 +112,40 @@ def test_backfill_adds_chunk_locator_to_legacy_documents_and_facts(tmp_path):
     assert doc["locator"] == "chunk 3"
     assert json.loads(doc["metadata_json"])["chunk"] == 3
     assert fact["evidence_locator"] == "chunk 3"
+
+
+def test_backfill_adds_fallback_span_for_curated_legacy_fact(tmp_path):
+    with connect(tmp_path / "test.sqlite") as conn:
+        create_schema(conn)
+        source_id = insert_source(conn, {"title": "Curated legacy source"})
+        document_id = insert_document_chunk(conn, source_id, 0, "chunk body without curated wording", start_char=200, end_char=232)
+        fact_id = insert_fact(
+            conn,
+            source_id=source_id,
+            subject_id=None,
+            predicate="recommendation",
+            document_id=document_id,
+            evidence="manual curated summary",
+        )
+        conn.execute(
+            """
+            UPDATE facts
+            SET evidence_locator = NULL, evidence_start = NULL, evidence_end = NULL
+            WHERE id = ?
+            """,
+            (fact_id,),
+        )
+
+        stats = backfill(conn, table_limit=0)
+        fact = conn.execute(
+            "SELECT evidence_locator, evidence_start, evidence_end FROM facts WHERE id = ?",
+            (fact_id,),
+        ).fetchone()
+
+    assert stats["facts_evidence_fallback"] == 1
+    assert fact["evidence_locator"] == "chunk 1"
+    assert fact["evidence_start"] == 200
+    assert fact["evidence_end"] == 232
 
 
 def test_diagnose_mislabeled_image_by_magic_bytes(tmp_path, monkeypatch):

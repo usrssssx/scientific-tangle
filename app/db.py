@@ -6,8 +6,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable
 
-from .config import DB_PATH, DICTIONARY_DIR, ONTOLOGY_PATH
+from .config import DB_PATH, DICTIONARY_DIR, ONTOLOGY_PATH, ROLE_ORDER
 from .embeddings import EMBEDDING_DIMS, EMBEDDING_MODEL, embed_text, vector_to_blob
+from .field_encryption import decrypt_field, encrypt_field
 
 
 REQUIRED_DICTIONARY_FILES = (
@@ -46,7 +47,7 @@ def connect(db_path: Path | str = DB_PATH):
 def row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
     if row is None:
         return None
-    result = dict(row)
+    result = {key: decrypt_field(value) if isinstance(value, str) else value for key, value in dict(row).items()}
     for key in (
         "aliases_json",
         "conditions_json",
@@ -56,6 +57,10 @@ def row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
         "metadata_json",
         "result_json",
         "details_json",
+        "resource_json",
+        "external_json",
+        "classifications_json",
+        "emails_json",
         "validation_warnings_json",
         "headers_json",
         "rows_json",
@@ -97,6 +102,11 @@ def create_schema(conn: sqlite3.Connection) -> None:
         """
         DROP TABLE IF EXISTS documents_fts;
         DROP TABLE IF EXISTS document_embeddings;
+        DROP TABLE IF EXISTS export_approvals;
+        DROP TABLE IF EXISTS policy_decisions;
+        DROP TABLE IF EXISTS directory_group_members;
+        DROP TABLE IF EXISTS directory_groups;
+        DROP TABLE IF EXISTS directory_users;
         DROP TABLE IF EXISTS audit_log;
         DROP TABLE IF EXISTS ingest_files;
         DROP TABLE IF EXISTS graph_edges;
@@ -315,6 +325,80 @@ def create_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE export_approvals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            requester TEXT,
+            requester_role TEXT NOT NULL,
+            action TEXT NOT NULL,
+            export_format TEXT NOT NULL,
+            object_type TEXT NOT NULL,
+            object_id TEXT,
+            payload_hash TEXT NOT NULL,
+            max_confidentiality TEXT NOT NULL,
+            classifications_json TEXT DEFAULT '[]',
+            reason TEXT,
+            justification TEXT,
+            status TEXT DEFAULT 'pending',
+            requested_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            reviewed_by TEXT,
+            reviewer_role TEXT,
+            reviewed_at TEXT,
+            review_comment TEXT,
+            consumed_at TEXT,
+            expires_at TEXT
+        );
+
+        CREATE TABLE policy_decisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            allowed INTEGER NOT NULL,
+            reason TEXT,
+            source TEXT,
+            role TEXT,
+            subject TEXT,
+            department TEXT,
+            project TEXT,
+            clearance TEXT,
+            auth_method TEXT,
+            resource_json TEXT DEFAULT '{}',
+            external_json TEXT DEFAULT '{}',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE directory_users (
+            id TEXT PRIMARY KEY,
+            user_name TEXT NOT NULL UNIQUE,
+            display_name TEXT,
+            role TEXT,
+            department TEXT,
+            project TEXT,
+            clearance TEXT,
+            active INTEGER DEFAULT 1,
+            external_id TEXT,
+            emails_json TEXT DEFAULT '[]',
+            metadata_json TEXT DEFAULT '{}',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            deactivated_at TEXT
+        );
+
+        CREATE TABLE directory_groups (
+            id TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL UNIQUE,
+            role TEXT,
+            external_id TEXT,
+            metadata_json TEXT DEFAULT '{}',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE directory_group_members (
+            group_id TEXT NOT NULL REFERENCES directory_groups(id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL REFERENCES directory_users(id) ON DELETE CASCADE,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(group_id, user_id)
+        );
+
         CREATE TABLE ingest_files (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             path TEXT NOT NULL UNIQUE,
@@ -341,8 +425,13 @@ def create_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX idx_facts_status ON facts(status);
         CREATE INDEX idx_facts_status_confidence ON facts(status, confidence DESC, id DESC);
         CREATE INDEX idx_facts_document ON facts(document_id);
+        CREATE INDEX idx_facts_subject ON facts(subject_id);
+        CREATE INDEX idx_facts_object ON facts(object_id);
         CREATE INDEX idx_facts_numeric ON facts(property, min_value, max_value, numeric_value, unit);
         CREATE INDEX idx_graph_edges_source ON graph_edges(source_id);
+        CREATE INDEX idx_graph_edges_subject ON graph_edges(subject_id);
+        CREATE INDEX idx_graph_edges_object ON graph_edges(object_id);
+        CREATE INDEX idx_graph_edges_predicate ON graph_edges(predicate);
         CREATE INDEX idx_fact_reviews_fact ON fact_reviews(fact_id);
         CREATE UNIQUE INDEX idx_fact_assignments_active_fact ON fact_assignments(fact_id) WHERE status = 'active';
         CREATE INDEX idx_fact_assignments_assignee ON fact_assignments(assignee, status, due_at);
@@ -352,6 +441,16 @@ def create_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX idx_experiments_process ON experiments(process);
         CREATE INDEX idx_ingest_files_status ON ingest_files(status);
         CREATE INDEX idx_ingest_files_suffix ON ingest_files(suffix);
+        CREATE INDEX idx_export_approvals_status ON export_approvals(status, requested_at);
+        CREATE INDEX idx_export_approvals_payload ON export_approvals(payload_hash, export_format, object_type, object_id);
+        CREATE INDEX idx_policy_decisions_action ON policy_decisions(action, created_at);
+        CREATE INDEX idx_policy_decisions_allowed ON policy_decisions(allowed, created_at);
+        CREATE INDEX idx_policy_decisions_source ON policy_decisions(source, created_at);
+        CREATE INDEX idx_directory_users_user_name ON directory_users(user_name);
+        CREATE INDEX idx_directory_users_external_id ON directory_users(external_id);
+        CREATE INDEX idx_directory_users_active ON directory_users(active);
+        CREATE INDEX idx_directory_groups_external_id ON directory_groups(external_id);
+        CREATE INDEX idx_directory_group_members_user ON directory_group_members(user_id);
         """
     )
 
@@ -423,7 +522,12 @@ def ensure_operational_schema(conn: sqlite3.Connection) -> None:
             CREATE INDEX IF NOT EXISTS idx_facts_document ON facts(document_id);
             CREATE INDEX IF NOT EXISTS idx_facts_source ON facts(source_id);
             CREATE INDEX IF NOT EXISTS idx_facts_status_confidence ON facts(status, confidence DESC, id DESC);
+            CREATE INDEX IF NOT EXISTS idx_facts_subject ON facts(subject_id);
+            CREATE INDEX IF NOT EXISTS idx_facts_object ON facts(object_id);
             CREATE INDEX IF NOT EXISTS idx_graph_edges_source ON graph_edges(source_id);
+            CREATE INDEX IF NOT EXISTS idx_graph_edges_subject ON graph_edges(subject_id);
+            CREATE INDEX IF NOT EXISTS idx_graph_edges_object ON graph_edges(object_id);
+            CREATE INDEX IF NOT EXISTS idx_graph_edges_predicate ON graph_edges(predicate);
             CREATE INDEX IF NOT EXISTS idx_document_tables_source ON document_tables(source_id);
             CREATE INDEX IF NOT EXISTS idx_document_embeddings_source ON document_embeddings(source_id);
             CREATE TABLE IF NOT EXISTS fact_assignments (
@@ -470,6 +574,138 @@ def ensure_operational_schema(conn: sqlite3.Connection) -> None:
             CREATE INDEX IF NOT EXISTS idx_fact_dispute_comments_dispute ON fact_dispute_comments(dispute_id);
             """
         )
+    ensure_audit_schema(conn)
+    ensure_export_approval_schema(conn)
+    ensure_policy_decision_schema(conn)
+    ensure_directory_schema(conn)
+
+
+def ensure_audit_schema(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            actor TEXT,
+            role TEXT,
+            action TEXT NOT NULL,
+            object_type TEXT,
+            object_id TEXT,
+            details_json TEXT DEFAULT '{}',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+
+def ensure_export_approval_schema(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS export_approvals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            requester TEXT,
+            requester_role TEXT NOT NULL,
+            action TEXT NOT NULL,
+            export_format TEXT NOT NULL,
+            object_type TEXT NOT NULL,
+            object_id TEXT,
+            payload_hash TEXT NOT NULL,
+            max_confidentiality TEXT NOT NULL,
+            classifications_json TEXT DEFAULT '[]',
+            reason TEXT,
+            justification TEXT,
+            status TEXT DEFAULT 'pending',
+            requested_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            reviewed_by TEXT,
+            reviewer_role TEXT,
+            reviewed_at TEXT,
+            review_comment TEXT,
+            consumed_at TEXT,
+            expires_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_export_approvals_status ON export_approvals(status, requested_at);
+        CREATE INDEX IF NOT EXISTS idx_export_approvals_payload ON export_approvals(payload_hash, export_format, object_type, object_id);
+        """
+    )
+
+
+def ensure_policy_decision_schema(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS policy_decisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            allowed INTEGER NOT NULL,
+            reason TEXT,
+            source TEXT,
+            role TEXT,
+            subject TEXT,
+            department TEXT,
+            project TEXT,
+            clearance TEXT,
+            auth_method TEXT,
+            resource_json TEXT DEFAULT '{}',
+            external_json TEXT DEFAULT '{}',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_policy_decisions_action ON policy_decisions(action, created_at);
+        CREATE INDEX IF NOT EXISTS idx_policy_decisions_allowed ON policy_decisions(allowed, created_at);
+        CREATE INDEX IF NOT EXISTS idx_policy_decisions_source ON policy_decisions(source, created_at);
+        """
+    )
+
+
+def ensure_directory_schema(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS directory_users (
+            id TEXT PRIMARY KEY,
+            user_name TEXT NOT NULL UNIQUE,
+            display_name TEXT,
+            role TEXT,
+            department TEXT,
+            project TEXT,
+            clearance TEXT,
+            active INTEGER DEFAULT 1,
+            external_id TEXT,
+            emails_json TEXT DEFAULT '[]',
+            metadata_json TEXT DEFAULT '{}',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            deactivated_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS directory_groups (
+            id TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL UNIQUE,
+            role TEXT,
+            external_id TEXT,
+            metadata_json TEXT DEFAULT '{}',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS directory_group_members (
+            group_id TEXT NOT NULL REFERENCES directory_groups(id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL REFERENCES directory_users(id) ON DELETE CASCADE,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(group_id, user_id)
+        )
+        """
+    )
+    for statement in (
+        "CREATE INDEX IF NOT EXISTS idx_directory_users_user_name ON directory_users(user_name)",
+        "CREATE INDEX IF NOT EXISTS idx_directory_users_external_id ON directory_users(external_id)",
+        "CREATE INDEX IF NOT EXISTS idx_directory_users_active ON directory_users(active)",
+        "CREATE INDEX IF NOT EXISTS idx_directory_groups_external_id ON directory_groups(external_id)",
+        "CREATE INDEX IF NOT EXISTS idx_directory_group_members_user ON directory_group_members(user_id)",
+    ):
+        conn.execute(statement)
 
 
 def readiness_report(db_path: Path | str = DB_PATH) -> dict[str, Any]:
@@ -533,13 +769,640 @@ def is_database_ready(db_path: Path | str = DB_PATH) -> bool:
 
 
 def insert_audit(conn: sqlite3.Connection, action: str, role: str, actor: str = "demo-user", object_type: str | None = None, object_id: str | None = None, details: dict[str, Any] | None = None) -> None:
+    ensure_audit_schema(conn)
+    details_json = json.dumps(details or {}, ensure_ascii=False)
     conn.execute(
         """
         INSERT INTO audit_log(actor, role, action, object_type, object_id, details_json)
         VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (actor, role, action, object_type, object_id, json.dumps(details or {}, ensure_ascii=False)),
+        (actor, role, action, object_type, encrypt_field(object_id), encrypt_field(details_json)),
     )
+
+
+def insert_policy_decision(
+    conn: sqlite3.Connection,
+    *,
+    action: str,
+    allowed: bool,
+    reason: str,
+    source: str,
+    role: str,
+    subject: str | None = None,
+    department: str | None = None,
+    project: str | None = None,
+    clearance: str | None = None,
+    auth_method: str | None = None,
+    resource: dict[str, Any] | None = None,
+    external: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    ensure_policy_decision_schema(conn)
+    cursor = conn.execute(
+        """
+        INSERT INTO policy_decisions(
+            action, allowed, reason, source, role, subject, department, project,
+            clearance, auth_method, resource_json, external_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            action,
+            1 if allowed else 0,
+            encrypt_field(reason),
+            source,
+            role,
+            subject,
+            department,
+            project,
+            clearance,
+            auth_method,
+            encrypt_field(json.dumps(resource or {}, ensure_ascii=False)),
+            encrypt_field(json.dumps(external or {}, ensure_ascii=False)),
+        ),
+    )
+    row = conn.execute("SELECT * FROM policy_decisions WHERE id = ?", (int(cursor.lastrowid),)).fetchone()
+    return row_to_dict(row) or {}
+
+
+def list_policy_decisions(
+    conn: sqlite3.Connection,
+    *,
+    action: str | None = None,
+    allowed: bool | None = None,
+    source: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    ensure_policy_decision_schema(conn)
+    capped_limit = max(1, min(int(limit), 500))
+    where: list[str] = []
+    values: list[Any] = []
+    if action:
+        where.append("action = ?")
+        values.append(action)
+    if allowed is not None:
+        where.append("allowed = ?")
+        values.append(1 if allowed else 0)
+    if source:
+        where.append("source = ?")
+        values.append(source)
+    clause = f"WHERE {' AND '.join(where)}" if where else ""
+    rows = conn.execute(
+        f"SELECT * FROM policy_decisions {clause} ORDER BY id DESC LIMIT ?",
+        values + [capped_limit],
+    ).fetchall()
+    return rows_to_dicts(rows)
+
+
+def _validate_directory_role(role: str | None) -> str | None:
+    if role in {None, ""}:
+        return None
+    normalized = str(role).strip()
+    if normalized not in ROLE_ORDER:
+        raise ValueError(f"Unknown directory role: {role}")
+    return normalized
+
+
+def upsert_directory_user(
+    conn: sqlite3.Connection,
+    *,
+    user_id: str,
+    user_name: str | None = None,
+    display_name: str | None = None,
+    role: str | None = None,
+    department: str | None = None,
+    project: str | None = None,
+    clearance: str | None = None,
+    active: bool = True,
+    external_id: str | None = None,
+    emails: list[Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+    actor: str = "directory-sync",
+    actor_role: str = "admin",
+    audit: bool = True,
+) -> dict[str, Any]:
+    ensure_directory_schema(conn)
+    normalized_id = str(user_id or user_name or external_id or "").strip()
+    normalized_user_name = str(user_name or normalized_id).strip()
+    if not normalized_id:
+        raise ValueError("directory user_id is required")
+    if not normalized_user_name:
+        raise ValueError("directory user_name is required")
+    normalized_role = _validate_directory_role(role)
+    active_int = 1 if active else 0
+    conn.execute(
+        """
+        INSERT INTO directory_users(
+            id, user_name, display_name, role, department, project, clearance,
+            active, external_id, emails_json, metadata_json, updated_at, deactivated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CASE WHEN ? = 0 THEN CURRENT_TIMESTAMP ELSE NULL END)
+        ON CONFLICT(id) DO UPDATE SET
+            user_name = excluded.user_name,
+            display_name = excluded.display_name,
+            role = excluded.role,
+            department = excluded.department,
+            project = excluded.project,
+            clearance = excluded.clearance,
+            active = excluded.active,
+            external_id = excluded.external_id,
+            emails_json = excluded.emails_json,
+            metadata_json = excluded.metadata_json,
+            updated_at = CURRENT_TIMESTAMP,
+            deactivated_at = CASE
+                WHEN excluded.active = 0 THEN COALESCE(directory_users.deactivated_at, CURRENT_TIMESTAMP)
+                ELSE NULL
+            END
+        """,
+        (
+            normalized_id,
+            normalized_user_name,
+            display_name,
+            normalized_role,
+            department,
+            project,
+            clearance,
+            active_int,
+            external_id,
+            encrypt_field(json.dumps(emails or [], ensure_ascii=False)),
+            json.dumps(metadata or {}, ensure_ascii=False),
+            active_int,
+        ),
+    )
+    if audit:
+        insert_audit(
+            conn,
+            "directory_user_upsert",
+            actor_role,
+            actor=actor,
+            object_type="directory_user",
+            object_id=normalized_id,
+            details={
+                "user_name": normalized_user_name,
+                "role": normalized_role,
+                "department": department,
+                "project": project,
+                "clearance": clearance,
+                "active": bool(active),
+            },
+        )
+    user = get_directory_user(conn, normalized_id)
+    if user is None:
+        raise KeyError(f"Directory user not found after upsert: {normalized_id}")
+    return user
+
+
+def get_directory_user(conn: sqlite3.Connection, subject: str) -> dict[str, Any] | None:
+    ensure_directory_schema(conn)
+    normalized = str(subject).strip()
+    if not normalized:
+        return None
+    row = conn.execute(
+        """
+        SELECT *
+        FROM directory_users
+        WHERE id = ? OR user_name = ? OR external_id = ?
+        ORDER BY CASE WHEN id = ? THEN 0 WHEN user_name = ? THEN 1 ELSE 2 END
+        LIMIT 1
+        """,
+        (normalized, normalized, normalized, normalized, normalized),
+    ).fetchone()
+    return row_to_dict(row)
+
+
+def list_directory_users(conn: sqlite3.Connection, *, active: bool | None = None, limit: int = 100, start_index: int = 1) -> list[dict[str, Any]]:
+    ensure_directory_schema(conn)
+    capped_limit = max(1, min(int(limit), 500))
+    offset = max(0, int(start_index) - 1)
+    if active is None:
+        rows = conn.execute(
+            "SELECT * FROM directory_users ORDER BY user_name LIMIT ? OFFSET ?",
+            (capped_limit, offset),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM directory_users WHERE active = ? ORDER BY user_name LIMIT ? OFFSET ?",
+            (1 if active else 0, capped_limit, offset),
+        ).fetchall()
+    return rows_to_dicts(rows)
+
+
+def count_directory_users(conn: sqlite3.Connection, *, active: bool | None = None) -> int:
+    ensure_directory_schema(conn)
+    if active is None:
+        return int(conn.execute("SELECT COUNT(*) FROM directory_users").fetchone()[0])
+    return int(conn.execute("SELECT COUNT(*) FROM directory_users WHERE active = ?", (1 if active else 0,)).fetchone()[0])
+
+
+def deactivate_directory_user(
+    conn: sqlite3.Connection,
+    user_id: str,
+    *,
+    actor: str = "directory-sync",
+    actor_role: str = "admin",
+    audit: bool = True,
+) -> dict[str, Any]:
+    ensure_directory_schema(conn)
+    user = get_directory_user(conn, user_id)
+    if user is None:
+        raise KeyError(f"Directory user not found: {user_id}")
+    conn.execute(
+        """
+        UPDATE directory_users
+        SET active = 0,
+            deactivated_at = COALESCE(deactivated_at, CURRENT_TIMESTAMP),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (user["id"],),
+    )
+    if audit:
+        insert_audit(
+            conn,
+            "directory_user_deactivate",
+            actor_role,
+            actor=actor,
+            object_type="directory_user",
+            object_id=user["id"],
+            details={"user_name": user.get("user_name")},
+        )
+    deactivated = get_directory_user(conn, user["id"])
+    if deactivated is None:
+        raise KeyError(f"Directory user not found after deactivate: {user_id}")
+    return deactivated
+
+
+def upsert_directory_group(
+    conn: sqlite3.Connection,
+    *,
+    group_id: str,
+    display_name: str | None = None,
+    role: str | None = None,
+    external_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    actor: str = "directory-sync",
+    actor_role: str = "admin",
+    audit: bool = True,
+) -> dict[str, Any]:
+    ensure_directory_schema(conn)
+    normalized_id = str(group_id or display_name or external_id or "").strip()
+    normalized_display_name = str(display_name or normalized_id).strip()
+    if not normalized_id:
+        raise ValueError("directory group_id is required")
+    if not normalized_display_name:
+        raise ValueError("directory group display_name is required")
+    normalized_role = _validate_directory_role(role)
+    conn.execute(
+        """
+        INSERT INTO directory_groups(id, display_name, role, external_id, metadata_json, updated_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+            display_name = excluded.display_name,
+            role = excluded.role,
+            external_id = excluded.external_id,
+            metadata_json = excluded.metadata_json,
+            updated_at = CURRENT_TIMESTAMP
+        """,
+        (
+            normalized_id,
+            normalized_display_name,
+            normalized_role,
+            external_id,
+            json.dumps(metadata or {}, ensure_ascii=False),
+        ),
+    )
+    if audit:
+        insert_audit(
+            conn,
+            "directory_group_upsert",
+            actor_role,
+            actor=actor,
+            object_type="directory_group",
+            object_id=normalized_id,
+            details={"display_name": normalized_display_name, "role": normalized_role},
+        )
+    group = get_directory_group(conn, normalized_id)
+    if group is None:
+        raise KeyError(f"Directory group not found after upsert: {normalized_id}")
+    return group
+
+
+def get_directory_group(conn: sqlite3.Connection, group_id: str) -> dict[str, Any] | None:
+    ensure_directory_schema(conn)
+    normalized = str(group_id).strip()
+    if not normalized:
+        return None
+    row = conn.execute(
+        """
+        SELECT *
+        FROM directory_groups
+        WHERE id = ? OR display_name = ? OR external_id = ?
+        ORDER BY CASE WHEN id = ? THEN 0 WHEN display_name = ? THEN 1 ELSE 2 END
+        LIMIT 1
+        """,
+        (normalized, normalized, normalized, normalized, normalized),
+    ).fetchone()
+    return row_to_dict(row)
+
+
+def list_directory_groups(conn: sqlite3.Connection, *, limit: int = 100, start_index: int = 1) -> list[dict[str, Any]]:
+    ensure_directory_schema(conn)
+    capped_limit = max(1, min(int(limit), 500))
+    offset = max(0, int(start_index) - 1)
+    rows = conn.execute(
+        "SELECT * FROM directory_groups ORDER BY display_name LIMIT ? OFFSET ?",
+        (capped_limit, offset),
+    ).fetchall()
+    return rows_to_dicts(rows)
+
+
+def count_directory_groups(conn: sqlite3.Connection) -> int:
+    ensure_directory_schema(conn)
+    return int(conn.execute("SELECT COUNT(*) FROM directory_groups").fetchone()[0])
+
+
+def replace_directory_group_members(
+    conn: sqlite3.Connection,
+    group_id: str,
+    user_ids: list[str],
+    *,
+    actor: str = "directory-sync",
+    actor_role: str = "admin",
+    audit: bool = True,
+) -> list[dict[str, Any]]:
+    ensure_directory_schema(conn)
+    group = get_directory_group(conn, group_id)
+    if group is None:
+        raise KeyError(f"Directory group not found: {group_id}")
+    resolved_user_ids: list[str] = []
+    for user_id in dict.fromkeys(str(item).strip() for item in user_ids if str(item).strip()):
+        user = get_directory_user(conn, user_id)
+        if user is None:
+            raise KeyError(f"Directory user not found: {user_id}")
+        resolved_user_ids.append(str(user["id"]))
+    conn.execute("DELETE FROM directory_group_members WHERE group_id = ?", (group["id"],))
+    conn.executemany(
+        "INSERT OR IGNORE INTO directory_group_members(group_id, user_id) VALUES (?, ?)",
+        [(group["id"], user_id) for user_id in resolved_user_ids],
+    )
+    if audit:
+        insert_audit(
+            conn,
+            "directory_group_members_replace",
+            actor_role,
+            actor=actor,
+            object_type="directory_group",
+            object_id=group["id"],
+            details={"member_count": len(resolved_user_ids), "members": resolved_user_ids},
+        )
+    return list_directory_group_members(conn, group["id"])
+
+
+def list_directory_group_members(conn: sqlite3.Connection, group_id: str) -> list[dict[str, Any]]:
+    ensure_directory_schema(conn)
+    group = get_directory_group(conn, group_id)
+    if group is None:
+        raise KeyError(f"Directory group not found: {group_id}")
+    rows = conn.execute(
+        """
+        SELECT u.*
+        FROM directory_group_members gm
+        JOIN directory_users u ON u.id = gm.user_id
+        WHERE gm.group_id = ?
+        ORDER BY u.user_name
+        """,
+        (group["id"],),
+    ).fetchall()
+    return rows_to_dicts(rows)
+
+
+def list_directory_user_groups(conn: sqlite3.Connection, user_id: str) -> list[dict[str, Any]]:
+    ensure_directory_schema(conn)
+    user = get_directory_user(conn, user_id)
+    if user is None:
+        return []
+    rows = conn.execute(
+        """
+        SELECT g.*
+        FROM directory_group_members gm
+        JOIN directory_groups g ON g.id = gm.group_id
+        WHERE gm.user_id = ?
+        ORDER BY g.display_name
+        """,
+        (user["id"],),
+    ).fetchall()
+    return rows_to_dicts(rows)
+
+
+def delete_directory_group(
+    conn: sqlite3.Connection,
+    group_id: str,
+    *,
+    actor: str = "directory-sync",
+    actor_role: str = "admin",
+    audit: bool = True,
+) -> dict[str, Any]:
+    ensure_directory_schema(conn)
+    group = get_directory_group(conn, group_id)
+    if group is None:
+        raise KeyError(f"Directory group not found: {group_id}")
+    conn.execute("DELETE FROM directory_groups WHERE id = ?", (group["id"],))
+    if audit:
+        insert_audit(
+            conn,
+            "directory_group_delete",
+            actor_role,
+            actor=actor,
+            object_type="directory_group",
+            object_id=group["id"],
+            details={"display_name": group.get("display_name")},
+        )
+    return group
+
+
+def create_export_approval(
+    conn: sqlite3.Connection,
+    *,
+    requester: str,
+    requester_role: str,
+    action: str,
+    export_format: str,
+    object_type: str,
+    object_id: str | None,
+    payload_hash: str,
+    max_confidentiality: str,
+    classifications: list[str],
+    reason: str,
+    justification: str,
+    expires_at: str | None = None,
+) -> dict[str, Any]:
+    ensure_export_approval_schema(conn)
+    cursor = conn.execute(
+        """
+        INSERT INTO export_approvals(
+            requester, requester_role, action, export_format, object_type, object_id,
+            payload_hash, max_confidentiality, classifications_json, reason,
+            justification, expires_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            requester,
+            requester_role,
+            action,
+            export_format,
+            object_type,
+            object_id,
+            payload_hash,
+            max_confidentiality,
+            json.dumps(classifications, ensure_ascii=False),
+            encrypt_field(reason),
+            encrypt_field(justification),
+            expires_at,
+        ),
+    )
+    approval_id = int(cursor.lastrowid)
+    insert_audit(
+        conn,
+        "export_approval_request",
+        requester_role,
+        actor=requester,
+        object_type=object_type,
+        object_id=object_id,
+        details={
+            "approval_id": approval_id,
+            "action": action,
+            "format": export_format,
+            "max_confidentiality": max_confidentiality,
+            "classifications": classifications,
+            "reason": reason,
+        },
+    )
+    return get_export_approval(conn, approval_id)
+
+
+def get_export_approval(conn: sqlite3.Connection, approval_id: int) -> dict[str, Any]:
+    ensure_export_approval_schema(conn)
+    row = conn.execute("SELECT * FROM export_approvals WHERE id = ?", (approval_id,)).fetchone()
+    if row is None:
+        raise KeyError(f"Export approval not found: {approval_id}")
+    return row_to_dict(row) or {}
+
+
+def list_export_approvals(conn: sqlite3.Connection, status: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    ensure_export_approval_schema(conn)
+    capped_limit = max(1, min(int(limit), 500))
+    if status:
+        rows = conn.execute(
+            "SELECT * FROM export_approvals WHERE status = ? ORDER BY id DESC LIMIT ?",
+            (status, capped_limit),
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM export_approvals ORDER BY id DESC LIMIT ?", (capped_limit,)).fetchall()
+    return rows_to_dicts(rows)
+
+
+def review_export_approval(
+    conn: sqlite3.Connection,
+    approval_id: int,
+    *,
+    approved: bool,
+    reviewer: str,
+    reviewer_role: str,
+    comment: str | None = None,
+    expires_at: str | None = None,
+) -> dict[str, Any]:
+    approval = get_export_approval(conn, approval_id)
+    if approval.get("status") != "pending":
+        raise ValueError(f"Export approval {approval_id} is not pending")
+    status = "approved" if approved else "rejected"
+    conn.execute(
+        """
+        UPDATE export_approvals
+        SET status = ?,
+            reviewed_by = ?,
+            reviewer_role = ?,
+            reviewed_at = CURRENT_TIMESTAMP,
+            review_comment = ?,
+            expires_at = COALESCE(?, expires_at)
+        WHERE id = ?
+        """,
+        (status, reviewer, reviewer_role, encrypt_field(comment), expires_at, approval_id),
+    )
+    insert_audit(
+        conn,
+        "export_approval_approve" if approved else "export_approval_reject",
+        reviewer_role,
+        actor=reviewer,
+        object_type=approval.get("object_type"),
+        object_id=approval.get("object_id"),
+        details={
+            "approval_id": approval_id,
+            "status": status,
+            "format": approval.get("export_format"),
+            "max_confidentiality": approval.get("max_confidentiality"),
+            "comment": comment,
+        },
+    )
+    return get_export_approval(conn, approval_id)
+
+
+def consume_export_approval(
+    conn: sqlite3.Connection,
+    approval_id: int,
+    *,
+    requester_role: str,
+    action: str,
+    export_format: str,
+    object_type: str,
+    object_id: str | None,
+    payload_hash: str,
+    max_confidentiality: str,
+    actor: str = "demo-user",
+) -> dict[str, Any]:
+    approval = get_export_approval(conn, approval_id)
+    if approval.get("status") != "approved" or approval.get("consumed_at"):
+        raise ValueError(f"Export approval {approval_id} is not available")
+    expires_at = approval.get("expires_at")
+    if expires_at:
+        row = conn.execute("SELECT CASE WHEN ? < CURRENT_TIMESTAMP THEN 1 ELSE 0 END", (expires_at,)).fetchone()
+        if row and int(row[0]) == 1:
+            conn.execute("UPDATE export_approvals SET status = 'expired' WHERE id = ?", (approval_id,))
+            raise ValueError(f"Export approval {approval_id} is expired")
+    expected = {
+        "action": action,
+        "export_format": export_format,
+        "object_type": object_type,
+        "object_id": object_id,
+        "payload_hash": payload_hash,
+        "max_confidentiality": max_confidentiality,
+    }
+    for key, expected_value in expected.items():
+        actual_value = approval.get(key)
+        if (actual_value or None) != (expected_value or None):
+            raise ValueError(f"Export approval {approval_id} does not match {key}")
+    conn.execute(
+        """
+        UPDATE export_approvals
+        SET status = 'used', consumed_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (approval_id,),
+    )
+    insert_audit(
+        conn,
+        "export_approval_consume",
+        requester_role,
+        actor=actor,
+        object_type=object_type,
+        object_id=object_id,
+        details={
+            "approval_id": approval_id,
+            "action": action,
+            "format": export_format,
+            "max_confidentiality": max_confidentiality,
+        },
+    )
+    return get_export_approval(conn, approval_id)
 
 
 def ensure_ingest_manifest_schema(conn: sqlite3.Connection) -> None:
@@ -647,8 +1510,8 @@ def insert_source(conn: sqlite3.Connection, metadata: dict[str, Any], path: str 
             metadata.get("date"),
             float(metadata.get("reliability_score", 0.5)),
             metadata.get("confidentiality", "internal"),
-            path,
-            abstract,
+            encrypt_field(path),
+            encrypt_field(abstract),
             json.dumps(metadata, ensure_ascii=False),
         ),
     )
@@ -762,10 +1625,26 @@ def insert_fact(
     asserted_by: str = "auto-extractor",
 ) -> int:
     ensure_operational_schema(conn)
-    if evidence_locator is None and document_id is not None:
-        row = conn.execute("SELECT locator FROM documents WHERE id = ?", (document_id,)).fetchone()
+    if document_id is not None:
+        row = conn.execute(
+            "SELECT locator, text, start_char, end_char FROM documents WHERE id = ?",
+            (document_id,),
+        ).fetchone()
         if row is not None:
-            evidence_locator = row["locator"]
+            if evidence_locator is None:
+                evidence_locator = row["locator"]
+            if evidence and (evidence_start is None or evidence_end is None):
+                document_text = row["text"] or ""
+                document_start = int(row["start_char"] or 0)
+                match_start = document_text.find(evidence)
+                if match_start >= 0:
+                    evidence_start = document_start + match_start
+                    evidence_end = evidence_start + len(evidence)
+                else:
+                    fallback_start = document_start
+                    fallback_end = int(row["end_char"] or (fallback_start + max(len(document_text), len(evidence))))
+                    evidence_start = fallback_start if evidence_start is None else evidence_start
+                    evidence_end = max(evidence_start + 1, fallback_end) if evidence_end is None else evidence_end
     cur = conn.execute(
         """
         INSERT INTO facts(source_id, subject_id, predicate, object_id, property, comparator, numeric_value,

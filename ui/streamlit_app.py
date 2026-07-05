@@ -9,6 +9,7 @@ import streamlit as st
 
 API_URL = os.getenv("RD_KG_API_URL", "http://localhost:8000")
 API_KEY = os.getenv("RD_KG_API_KEY")
+SEARCH_TIMEOUT_SECONDS = int(os.getenv("RD_KG_SEARCH_TIMEOUT_SECONDS", "180"))
 
 st.set_page_config(page_title="R&D Knowledge Map MVP", layout="wide")
 st.title("Карта знаний R&D: горно-металлургический MVP")
@@ -106,7 +107,19 @@ if st.button("Найти и синтезировать ответ", type="primar
         "strict_numeric_filters": bool(strict_numeric_filters),
     }
     with st.spinner("Выполняю поиск по документам, графу и экспериментам"):
-        resp = requests.post(f"{API_URL}/search", json=payload, headers=api_headers(), timeout=60)
+        try:
+            resp = requests.post(
+                f"{API_URL}/search",
+                json=payload,
+                headers=api_headers(),
+                timeout=SEARCH_TIMEOUT_SECONDS,
+            )
+        except requests.exceptions.ReadTimeout:
+            st.error(f"API не вернул ответ за {SEARCH_TIMEOUT_SECONDS} секунд. Попробуйте уменьшить Top K или сузить запрос.")
+            st.stop()
+        except requests.exceptions.RequestException as exc:
+            st.error(f"Ошибка запроса к API: {exc}")
+            st.stop()
     if resp.status_code >= 400:
         st.error(resp.text)
     else:

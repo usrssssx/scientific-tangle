@@ -1,11 +1,14 @@
 import csv
 import io
+import json
 import zipfile
 from contextlib import contextmanager
 
 import app.main as main_module
 import pytest
+from app.db import connect as db_connect, create_schema
 from app.exporters import EVIDENCE_CSV_FIELDS, answer_payload_to_pdf, evidence_pack_to_csv, report_package_to_zip
+from app.models import ExportApprovalRequest, ExportApprovalReviewRequest
 from app.security import AccessContext
 from pypdf import PdfReader
 
@@ -219,3 +222,109 @@ def test_export_pdf_endpoint_blocks_secret_payload_for_manager_and_audits(monkey
     assert audit_events[0]["action"] == "export_pdf"
     assert audit_events[0]["details"]["export_policy"]["allowed"] is False
     assert audit_events[0]["details"]["export_policy"]["max_confidentiality"] == "secret"
+
+
+def test_export_pdf_endpoint_blocks_dlp_secret_assignment_and_audits(monkeypatch):
+    audit_events = []
+    payload = sample_payload()
+    payload["answer_markdown"] = "Operational export contains token=do-not-leak"
+
+    @contextmanager
+    def fake_connect():
+        yield object()
+
+    def fake_audit(conn, action, role, object_type=None, object_id=None, details=None):
+        audit_events.append(
+            {"action": action, "role": role, "object_type": object_type, "object_id": object_id, "details": details}
+        )
+
+    monkeypatch.delenv("RD_KG_DLP_RULES_JSON", raising=False)
+    monkeypatch.delenv("RD_KG_DLP_RULES_PATH", raising=False)
+    monkeypatch.setattr(main_module, "ensure_ready_or_503", lambda: None)
+    monkeypatch.setattr(main_module, "connect", fake_connect)
+    monkeypatch.setattr(main_module, "insert_audit", fake_audit)
+    monkeypatch.setattr(main_module, "run_search", lambda conn, request, role: payload)
+    monkeypatch.setattr(main_module, "attach_answer", lambda item: item)
+
+    with pytest.raises(main_module.HTTPException) as exc_info:
+        main_module.export_pdf("operational secret", context=AccessContext(role="manager"))
+
+    export_policy = audit_events[0]["details"]["export_policy"]
+    assert exc_info.value.status_code == 403
+    assert export_policy["allowed"] is False
+    assert export_policy["dlp_findings"][0]["rule"] == "secret_assignment"
+    assert "do-not-leak" not in json.dumps(audit_events[0]["details"])
+
+
+def test_sensitive_export_approval_allows_one_time_pdf_download(monkeypatch, tmp_path):
+    db_path = tmp_path / "approvals.sqlite"
+    with db_connect(db_path) as conn:
+        create_schema(conn)
+    secret_payload = sample_payload()
+    secret_payload["evidence_pack"]["facts"][0]["source_confidentiality"] = "secret"
+
+    @contextmanager
+    def fake_connect():
+        with db_connect(db_path) as conn:
+            yield conn
+
+    monkeypatch.setattr(main_module, "ensure_ready_or_503", lambda: None)
+    monkeypatch.setattr(main_module, "connect", fake_connect)
+    monkeypatch.setattr(main_module, "run_search", lambda conn, request, role: secret_payload)
+    monkeypatch.setattr(main_module, "attach_answer", lambda item: item)
+
+    request_response = main_module.request_export_approval(
+        ExportApprovalRequest(
+            export_format="pdf",
+            query="secret metallurgy protocol",
+            justification="External board pack requires controlled export.",
+            requester="manager-1",
+        ),
+        context=AccessContext(role="manager"),
+    )
+    request_payload = json.loads(request_response.body)
+    approval_id = request_payload["approval"]["id"]
+
+    assert request_payload["status"] == "pending"
+    assert request_payload["approval"]["max_confidentiality"] == "secret"
+
+    approve_response = main_module.approve_export_approval(
+        approval_id,
+        ExportApprovalReviewRequest(reviewer="security-admin", comment="Approved for one-time export."),
+        context=AccessContext(role="admin"),
+    )
+    approve_payload = json.loads(approve_response.body)
+    assert approve_payload["status"] == "approved"
+
+    response = main_module.export_pdf(
+        "secret metallurgy protocol",
+        approval_id=approval_id,
+        context=AccessContext(role="manager"),
+    )
+
+    assert response.media_type == "application/pdf"
+    assert response.body.startswith(b"%PDF")
+    with db_connect(db_path) as conn:
+        approval = conn.execute("SELECT status, consumed_at FROM export_approvals WHERE id = ?", (approval_id,)).fetchone()
+        audit_actions = [
+            row["action"]
+            for row in conn.execute("SELECT action FROM audit_log ORDER BY id").fetchall()
+        ]
+
+    assert approval["status"] == "used"
+    assert approval["consumed_at"] is not None
+    assert audit_actions == [
+        "export_approval_request",
+        "export_approval_approve",
+        "export_approval_consume",
+        "export_pdf",
+    ]
+
+    with pytest.raises(main_module.HTTPException) as exc_info:
+        main_module.export_pdf(
+            "secret metallurgy protocol",
+            approval_id=approval_id,
+            context=AccessContext(role="manager"),
+        )
+
+    assert exc_info.value.status_code == 403

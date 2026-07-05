@@ -1,0 +1,11 @@
+[Unit]
+Description=Run RD Knowledge backup and restore drill daily
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+RandomizedDelaySec=20m
+Persistent=true
+Unit=rdkg-backup.service
+
+[Install]
+WantedBy=timers.target

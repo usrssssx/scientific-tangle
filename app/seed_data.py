@@ -24,6 +24,7 @@ from .extract import (
     read_document_text,
     validate_numeric_hit,
 )
+from .field_encryption import encrypt_field
 
 
 def _entity_type_from_category(category: str) -> str:
@@ -188,7 +189,7 @@ def seed_experts(conn) -> None:
                 item.get("organization"),
                 item.get("geography"),
                 json.dumps(item.get("expertise", []), ensure_ascii=False),
-                item.get("contact"),
+                encrypt_field(item.get("contact")),
             ),
         )
         expert_entity_id = upsert_entity(conn, "Expert", item["name"], item["name"], [])

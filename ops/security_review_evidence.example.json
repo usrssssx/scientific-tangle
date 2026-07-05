@@ -1,0 +1,78 @@
+{
+  "review_id": "rdkg-sec-review-2026-pilot-example",
+  "status": "approved",
+  "approved_at": "2026-07-05",
+  "expires_at": "2099-12-31",
+  "redacted": true,
+  "approved_by": [
+    {
+      "name": "Internal Security Reviewer",
+      "role": "Security review owner",
+      "organization": "Example Corp"
+    }
+  ],
+  "scope": {
+    "environment": "production",
+    "system": "rd_knowledge_mvp",
+    "domain": "nornickel.netrun.store",
+    "release": "replace-with-release-or-image-digest"
+  },
+  "control_evidence": {
+    "identity": [
+      {
+        "ref": "GRC-IDENTITY-001",
+        "description": "OIDC/JWKS and SCIM directory enforcement review record",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "authorization": [
+      {
+        "ref": "GRC-AUTHZ-001",
+        "description": "RBAC/ABAC action matrix and external PDP bundle approval",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    ],
+    "dlp": [
+      {
+        "ref": "GRC-DLP-001",
+        "description": "Export DLP rule pack approval and sensitive export workflow test",
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    ],
+    "encryption": [
+      {
+        "ref": "GRC-ENC-001",
+        "description": "Managed encrypted storage/KMS evidence with secrets redacted",
+        "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      }
+    ],
+    "observability": [
+      {
+        "ref": "GRC-OBS-001",
+        "description": "SIEM export, alert routing and retention evidence",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    ],
+    "backup_restore": [
+      {
+        "ref": "GRC-BACKUP-001",
+        "description": "Encrypted backup, restore drill and retention evidence",
+        "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      }
+    ],
+    "disaster_recovery": [
+      {
+        "ref": "GRC-DR-001",
+        "description": "Immutable offsite storage and independent DR environment evidence",
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ],
+    "load_test": [
+      {
+        "ref": "GRC-SLA-001",
+        "description": "1M synthetic graph load-test result artifact",
+        "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    ]
+  }
+}

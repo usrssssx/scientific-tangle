@@ -1,0 +1,26 @@
+{
+  "backup_dir": "data/backups",
+  "encrypted": true,
+  "key_env": "RD_KG_BACKUP_KEY",
+  "keep_plaintext": false,
+  "offsite_dir": "/secure/offsite/rdkg",
+  "retention": {
+    "pattern": "rd_knowledge_*.sqlite*",
+    "keep_latest": 14,
+    "max_age_days": 30
+  },
+  "offsite_retention": {
+    "pattern": "rd_knowledge_*.sqlite*",
+    "keep_latest": 30,
+    "max_age_days": 90
+  },
+  "restore_drill": {
+    "enabled": true,
+    "require_embeddings": true,
+    "min_counts": {
+      "sources": 1,
+      "documents": 1,
+      "facts": 1
+    }
+  }
+}
